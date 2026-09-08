@@ -48,6 +48,10 @@ services:
       # puis mettez la valeur dans .env (échapper les $ en $$ dans .env).
       - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
       - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+      # Le routeur du dashboard utilise le service interne api@internal.
+      # Traefik génère malgré tout un service Docker par défaut
+      # "traefik-reverse-proxy@docker" (visible DOWN dans le dashboard) :
+      # il n'est PAS utilisé et n'a aucun impact. On le laisse tel quel.
 
 networks:
   web-proxy:
