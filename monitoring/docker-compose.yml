@@ -1,0 +1,66 @@
+# ============================================================
+# Monitoring — Netdata (conteneur, derrière Traefik)
+# ============================================================
+# Stack INDÉPENDANTE. Expose Netdata sur https://monitor.marikxgroup.com,
+# protégé par Basic Auth (via Traefik) et HTTPS automatique (Let's Encrypt).
+#
+# Prérequis :
+#   - Le réseau externe web-proxy existe :  docker network create web-proxy
+#   - La stack reverse-proxy/ (Traefik) tourne.
+#   - Le sous-domaine monitor.marikxgroup.com pointe vers l'IP du VPS.
+#
+# Préparation :
+#   cp .env.example .env   # puis renseigner NETDATA_AUTH
+#
+# Démarrage :
+#   docker compose --env-file .env up -d
+# ============================================================
+
+services:
+  netdata:
+    image: netdata/netdata:stable
+    container_name: netdata
+    restart: unless-stopped
+    hostname: monitor.marikxgroup.com
+    # Capacités nécessaires à la collecte de métriques système
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      # Données & config persistantes de Netdata
+      - netdata_config:/etc/netdata
+      - netdata_lib:/var/lib/netdata
+      - netdata_cache:/var/cache/netdata
+      # Accès en LECTURE SEULE aux ressources de l'hôte (monitoring)
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/log:/host/var/log:ro
+      # Socket Docker (lecture seule) : découverte & métriques des conteneurs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - web-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web-proxy"
+      # Routeur : https://monitor.marikxgroup.com
+      - "traefik.http.routers.netdata.rule=Host(`monitor.marikxgroup.com`)"
+      - "traefik.http.routers.netdata.entrypoints=websecure"
+      - "traefik.http.routers.netdata.tls.certresolver=letsencrypt"
+      - "traefik.http.services.netdata.loadbalancer.server.port=19999"
+      # Protection par mot de passe (Basic Auth)
+      - "traefik.http.routers.netdata.middlewares=netdata-auth"
+      - "traefik.http.middlewares.netdata-auth.basicauth.users=${NETDATA_AUTH}"
+
+volumes:
+  netdata_config:
+  netdata_lib:
+  netdata_cache:
+
+networks:
+  web-proxy:
+    external: true
