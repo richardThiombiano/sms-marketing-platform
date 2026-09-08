@@ -28,11 +28,18 @@ services:
       - SYS_ADMIN
     security_opt:
       - apparmor:unconfined
+    environment:
+      # Désactive l'onboarding/connexion à Netdata Cloud : l'agent sert
+      # directement le dashboard local (évite l'écran "Welcome/Sign-in"
+      # bloquant derrière un reverse proxy).
+      - "NETDATA_CLOUD_ENABLED=false"
     volumes:
       # Données & config persistantes de Netdata
       - netdata_config:/etc/netdata
       - netdata_lib:/var/lib/netdata
       - netdata_cache:/var/cache/netdata
+      # Désactive la fonctionnalité cloud au niveau agent
+      - ./cloud.conf:/etc/netdata/cloud.d/cloud.conf:ro
       # Accès en LECTURE SEULE aux ressources de l'hôte (monitoring)
       - /etc/passwd:/host/etc/passwd:ro
       - /etc/group:/host/etc/group:ro
