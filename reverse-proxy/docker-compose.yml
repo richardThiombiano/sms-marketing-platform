@@ -19,6 +19,11 @@ services:
     image: traefik:v3.1
     container_name: traefik
     restart: unless-stopped
+    environment:
+      # Force la version d'API Docker négociée par le client Traefik.
+      # Corrige l'erreur "client version X is too old. Minimum supported
+      # API version is 1.40" avec les démons Docker récents.
+      - "DOCKER_API_VERSION=1.44"
     command:
       # On charge la config statique depuis le fichier monté
       - "--configFile=/etc/traefik/traefik.yml"
