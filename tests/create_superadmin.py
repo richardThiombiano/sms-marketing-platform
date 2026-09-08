@@ -44,7 +44,6 @@ async def create_superadmin():
             slug="sms-pro-platform",
             email="admin@sms-pro.com",
             plan="enterprise",
-            sms_credits=999999,
             sms_provider="3mi",
         )
         db.add(tenant)
@@ -53,6 +52,7 @@ async def create_superadmin():
         # Créer l'utilisateur superadmin
         superadmin = User(
             tenant_id=tenant.id,
+            username="superadmin",
             email="admin@sms-pro.com",
             password_hash=hash_password("Admin@2024!"),
             first_name="Admin",
