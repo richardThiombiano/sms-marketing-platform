@@ -2,6 +2,18 @@
 
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Origine de l'API (schéma + domaine) dérivée de NEXT_PUBLIC_API_URL.
+// Permet d'autoriser dynamiquement l'API dans la CSP (connect-src), quel
+// que soit le domaine déployé, sans valeur en dur.
+let apiOrigin = '';
+try {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    apiOrigin = new URL(process.env.NEXT_PUBLIC_API_URL).origin;
+  }
+} catch (e) {
+  apiOrigin = '';
+}
+
 const nextConfig = {
   output: 'standalone',
 
@@ -27,7 +39,7 @@ const nextConfig = {
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: blob: https:",
           "font-src 'self' data:",
-          "connect-src 'self' http://localhost:8000 https://*.execute-api.eu-west-1.amazonaws.com https://connect.facebook.net https://graph.facebook.com https://*.facebook.com",
+          `connect-src 'self' ${apiOrigin} https://connect.facebook.net https://graph.facebook.com https://*.facebook.com`,
           "frame-src https://www.facebook.com https://web.facebook.com",
           "frame-ancestors 'none'",
           "object-src 'none'",
