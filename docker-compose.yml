@@ -1,0 +1,90 @@
+services:
+  # ─── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sms-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend API (FastAPI) ─────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@host.docker.internal:5432/sms_marketing?ssl=disable
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+    depends_on:
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ─── Frontend Web (Next.js) ────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: sms-web
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/v1
+    depends_on:
+      - backend
+
+  # ─── Worker Automation (Birthday, Inactivity, Recurring) ────────
+  automation-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-automation-worker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@host.docker.internal:5432/sms_marketing?ssl=disable
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=development
+    depends_on:
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app
+    command: python -m app.workers.automation_worker
+    restart: unless-stopped
+
+  # ─── Worker DLR (Polling statut SMS) ───────────────────────────
+  dlr-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-dlr-worker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@host.docker.internal:5432/sms_marketing?ssl=disable
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=development
+    depends_on:
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app
+    command: python -m app.workers.dlr_worker
+    restart: unless-stopped

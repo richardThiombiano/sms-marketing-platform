@@ -1,0 +1,306 @@
+### ============================================
+### SMS PRO - API REQUESTS (REST Client)
+### ============================================
+### Utilisable avec VS Code REST Client ou Kiro
+### Variables à adapter selon votre environnement
+### ============================================
+
+@baseUrl = http://localhost:8000/v1
+@superadminToken = {{login_superadmin.response.body.access_token}}
+@ownerToken = {{login_owner.response.body.access_token}}
+@tenantId = {{create_tenant.response.body.tenant_id}}
+@contactId = {{create_contact.response.body.id}}
+@campaignId = {{create_campaign.response.body.id}}
+
+
+### ============================================
+### HEALTH CHECK
+### ============================================
+
+### Health Check
+GET http://localhost:8000/health
+
+### Swagger UI (ouvrir dans le navigateur)
+### http://localhost:8000/docs
+
+
+### ============================================
+### 1. AUTHENTIFICATION SUPERADMIN
+### ============================================
+
+### Login Superadmin
+# @name login_superadmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@sms-pro.com",
+  "password": "Admin@2024!"
+}
+
+### Mon Profil (superadmin)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{superadminToken}}
+
+
+### ============================================
+### 2. ADMINISTRATION - GESTION DES TENANTS
+### ============================================
+
+### Créer une entreprise
+# @name create_tenant
+POST {{baseUrl}}/admin/tenants
+Authorization: Bearer {{superadminToken}}
+Content-Type: application/json
+
+{
+  "name": "DigiCommerce",
+  "email": "contact@digicommerce.bf",
+  "phone": "+22670123456",
+  "plan": "pro",
+  "sms_credits": 500,
+  "sms_provider": "3mi",
+  "smsbus_username": "digicommerce",
+  "smsbus_password": "mot_de_passe_3mi",
+  "smsbus_id": "DIGI001",
+  "smsbus_sender_id": "DigiCom",
+  "owner_first_name": "Aminata",
+  "owner_last_name": "Koné",
+  "owner_email": "aminata@digicommerce.bf",
+  "owner_password": "OwnerPass123!"
+}
+
+### Lister toutes les entreprises
+GET {{baseUrl}}/admin/tenants
+Authorization: Bearer {{superadminToken}}
+
+### Changer le provider SMS d'un tenant
+PATCH {{baseUrl}}/admin/tenants/{{tenantId}}/provider
+Authorization: Bearer {{superadminToken}}
+Content-Type: application/json
+
+{
+  "sms_provider": "3mi"
+}
+
+### Ajouter des crédits SMS
+PATCH {{baseUrl}}/admin/tenants/{{tenantId}}/credits?amount=1000
+Authorization: Bearer {{superadminToken}}
+
+### Retirer des crédits SMS
+PATCH {{baseUrl}}/admin/tenants/{{tenantId}}/credits?amount=-200
+Authorization: Bearer {{superadminToken}}
+
+### Activer/Désactiver un tenant
+PATCH {{baseUrl}}/admin/tenants/{{tenantId}}/toggle
+Authorization: Bearer {{superadminToken}}
+
+### Vérifier le solde 3MI
+GET {{baseUrl}}/smsbus/balance
+Authorization: Bearer {{superadminToken}}
+
+
+### ============================================
+### 3. CONNEXION ENTREPRISE (OWNER)
+### ============================================
+
+### Login Owner
+# @name login_owner
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "aminata@digicommerce.bf",
+  "password": "OwnerPass123!"
+}
+
+### Mon Profil (owner)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{ownerToken}}
+
+### Infos Entreprise
+GET {{baseUrl}}/tenant
+Authorization: Bearer {{ownerToken}}
+
+### Modifier Infos Entreprise
+PATCH {{baseUrl}}/tenant
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "name": "DigiCommerce Burkina",
+  "phone": "+22670999888"
+}
+
+
+### ============================================
+### 4. CONTACTS
+### ============================================
+
+### Ajouter un contact
+# @name create_contact
+POST {{baseUrl}}/contacts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "phone": "22676837604",
+  "first_name": "Ibrahim",
+  "last_name": "Diallo",
+  "email": "ibrahim@gmail.com",
+  "birth_date": "1990-05-15T00:00:00",
+  "city": "Ouagadougou",
+  "country": "Burkina Faso",
+  "tags": ["vip", "fidele"]
+}
+
+### Ajouter un 2ème contact
+POST {{baseUrl}}/contacts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "phone": "22670112233",
+  "first_name": "Fatou",
+  "last_name": "Traoré",
+  "email": "fatou@yahoo.fr",
+  "city": "Bobo-Dioulasso",
+  "tags": ["nouveau"]
+}
+
+### Lister tous les contacts
+GET {{baseUrl}}/contacts
+Authorization: Bearer {{ownerToken}}
+
+### Rechercher un contact
+GET {{baseUrl}}/contacts?search=Ibrahim
+Authorization: Bearer {{ownerToken}}
+
+### Filtrer par tag
+GET {{baseUrl}}/contacts?tags=vip
+Authorization: Bearer {{ownerToken}}
+
+### Filtrer par ville
+GET {{baseUrl}}/contacts?city=Ouagadougou
+Authorization: Bearer {{ownerToken}}
+
+### Détails d'un contact
+GET {{baseUrl}}/contacts/{{contactId}}
+Authorization: Bearer {{ownerToken}}
+
+### Modifier un contact
+PATCH {{baseUrl}}/contacts/{{contactId}}
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "city": "Bobo-Dioulasso",
+  "tags": ["vip", "fidele", "premium"]
+}
+
+### Désinscrire un contact (opt-out)
+POST {{baseUrl}}/contacts/{{contactId}}/unsubscribe
+Authorization: Bearer {{ownerToken}}
+
+### Supprimer un contact
+DELETE {{baseUrl}}/contacts/{{contactId}}
+Authorization: Bearer {{ownerToken}}
+
+
+### ============================================
+### 5. CAMPAGNES
+### ============================================
+
+### Créer une campagne
+# @name create_campaign
+POST {{baseUrl}}/campaigns
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "name": "Promo Juillet -25%",
+  "content": "🎉 Profitez de -25% sur tout le magasin ! Code: JUIL25. Valable jusqu'au 31/07.",
+  "type": "marketing"
+}
+
+### Lister les campagnes
+GET {{baseUrl}}/campaigns
+Authorization: Bearer {{ownerToken}}
+
+### Filtrer par statut
+GET {{baseUrl}}/campaigns?status=draft
+Authorization: Bearer {{ownerToken}}
+
+### Détails d'une campagne
+GET {{baseUrl}}/campaigns/{{campaignId}}
+Authorization: Bearer {{ownerToken}}
+
+### Programmer une campagne
+POST {{baseUrl}}/campaigns/{{campaignId}}/schedule?scheduled_at=2026-07-15T09:00:00
+Authorization: Bearer {{ownerToken}}
+
+### Annuler une campagne programmée
+POST {{baseUrl}}/campaigns/{{campaignId}}/cancel
+Authorization: Bearer {{ownerToken}}
+
+### Envoyer une campagne (immédiat)
+POST {{baseUrl}}/campaigns/{{campaignId}}/send
+Authorization: Bearer {{ownerToken}}
+
+
+### ============================================
+### 6. ENVOI SMS DIRECT
+### ============================================
+
+### Envoyer un SMS unitaire
+POST {{baseUrl}}/sms/send
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "phone": "22676837604",
+  "content": "Bonjour Ibrahim ! Votre code de vérification est : 4521",
+  "type": "transactional"
+}
+
+### Envoyer un SMS en masse (bulk)
+POST {{baseUrl}}/sms/send-bulk
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "phones": ["22676837604", "22670112233", "22670445566"],
+  "content": "🔥 Vente flash ! -30% sur tout aujourd'hui. Rendez-vous en magasin !",
+  "type": "marketing"
+}
+
+
+### ============================================
+### 7. TEST INSCRIPTION BLOQUÉE
+### ============================================
+
+### Tentative d'inscription (doit retourner 403)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "company_name": "Entreprise Pirate",
+  "email": "pirate@test.com",
+  "password": "Pirate123!",
+  "first_name": "Hacker",
+  "last_name": "Test"
+}
+
+
+### ============================================
+### 8. WEBHOOKS 3MI (pour tester les callbacks)
+### ============================================
+
+### Simuler un DLR (accusé de réception)
+GET {{baseUrl}}/webhooks/3mi/dlr?msg=DELIVERED&dnr=22676837604&msgId=12345
+
+### Simuler un SMS entrant (MO)
+GET {{baseUrl}}/webhooks/3mi/mo?msg=Bonjour&dnr=22676837604&srn=3030
+
+### Simuler un opt-out par SMS
+GET {{baseUrl}}/webhooks/3mi/mo?msg=STOP&dnr=22676837604&srn=3030

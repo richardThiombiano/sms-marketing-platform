@@ -1,0 +1,54 @@
+# ============================================================
+# Traefik v3 — Configuration statique
+# ============================================================
+# Reverse proxy central partagé pour toutes les applications du VPS.
+# Le routage de chaque app se fait via des LABELS Docker (voir les
+# docker-compose des apps), pas ici.
+# ============================================================
+
+# ─── Points d'entrée ───────────────────────────────────────────
+entryPoints:
+  web:
+    address: ":80"
+    # Redirige tout le HTTP vers HTTPS
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+
+# ─── Fournisseurs ──────────────────────────────────────────────
+providers:
+  docker:
+    # Traefik découvre les conteneurs via l'API Docker
+    endpoint: "unix:///var/run/docker.sock"
+    # Ne PAS exposer un conteneur par défaut : il faut le label
+    # "traefik.enable=true" explicitement sur chaque service.
+    exposedByDefault: false
+    # Réseau partagé sur lequel Traefik joint les apps
+    network: web-proxy
+
+# ─── Résolveur de certificats (Let's Encrypt) ──────────────────
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      # Email de contact pour les certificats (surchargé via env dans compose)
+      email: "admin@marikxgroup.com"
+      storage: "/letsencrypt/acme.json"
+      # Challenge HTTP (le plus simple : port 80 doit être joignable)
+      httpChallenge:
+        entryPoint: web
+
+# ─── API / Dashboard ───────────────────────────────────────────
+# Dashboard activé mais exposé de façon sécurisée via labels (voir compose).
+api:
+  dashboard: true
+
+# ─── Logs ──────────────────────────────────────────────────────
+log:
+  level: INFO
+
+accessLog: {}

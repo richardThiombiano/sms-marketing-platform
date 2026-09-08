@@ -1,0 +1,55 @@
+# ============================================================
+# TEMPLATE — Brancher une nouvelle application au proxy Traefik
+# ============================================================
+# Copiez ce fichier dans le dépôt de votre nouvelle app, renommez-le
+# en docker-compose.yml (ou docker-compose.prod.yml) et adaptez :
+#   - le nom du service et de l'image / build
+#   - le sous-domaine (Host)
+#   - le port interne exposé par votre app (loadbalancer.server.port)
+#   - les noms de routeurs/services Traefik (doivent être UNIQUES sur le VPS)
+#
+# Prérequis :
+#   - Le réseau externe web-proxy existe :  docker network create web-proxy
+#   - La stack reverse-proxy/ (Traefik) tourne.
+#   - Le sous-domaine pointe vers l'IP du VPS (DNS Hostinger).
+#
+# Démarrage :  docker compose up -d --build
+# ============================================================
+
+services:
+  monapp:
+    # Remplacez par votre image ou un build local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: votre-image:tag
+    container_name: monapp
+    restart: unless-stopped
+    # PAS de "ports:" ici — c'est Traefik qui expose l'app vers l'extérieur.
+    networks:
+      - web-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web-proxy"
+      # ── IMPORTANT : les noms "monapp" ci-dessous doivent être UNIQUES
+      #    parmi toutes vos apps (sinon collision de routeurs Traefik).
+      - "traefik.http.routers.monapp.rule=Host(`monapp.marikxgroup.com`)"
+      - "traefik.http.routers.monapp.entrypoints=websecure"
+      - "traefik.http.routers.monapp.tls.certresolver=letsencrypt"
+      # Port INTERNE écouté par votre conteneur (ex. 3000, 8080, 80...)
+      - "traefik.http.services.monapp.loadbalancer.server.port=3000"
+
+  # Exemple : si l'app a besoin d'une base de données ou d'un cache,
+  # ajoutez-les ici sur un réseau PRIVÉ séparé (non exposé au proxy).
+  # db:
+  #   image: postgres:16-alpine
+  #   networks: [ internal ]
+  #   ...
+
+networks:
+  # Réseau partagé avec Traefik (créé une seule fois sur le VPS)
+  web-proxy:
+    external: true
+  # Réseau privé interne à cette app (dé-commentez si besoin)
+  # internal:
+  #   driver: bridge

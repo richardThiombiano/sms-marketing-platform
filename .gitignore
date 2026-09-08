@@ -1,0 +1,70 @@
+# ============================================================
+# .gitignore — Monorepo SMS Marketing Platform
+# ============================================================
+
+# ─── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+
+# ─── Node / Next.js (web) ──────────────────────────────────
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Mobile (Expo / React Native) ──────────────────────────
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+*.orig.*
+
+# ─── Environnements & secrets ──────────────────────────────
+# On ignore tous les .env à tous les niveaux, SAUF les exemples.
+.env
+.env.*
+!.env.example
+!.env.prod.example
+# fichiers .env spécifiques aux sous-projets
+**/.env
+**/.env.local
+**/.env.*.local
+
+# ─── Reverse proxy (Traefik) ───────────────────────────────
+reverse-proxy/letsencrypt/acme.json
+
+# ─── AWS SAM ───────────────────────────────────────────────
+.aws-sam/
+
+# ─── Distribution / build ──────────────────────────────────
+dist/
+build/
+
+# ─── IDE ───────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+
+# ─── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Certificats & clés ────────────────────────────────────
+*.pem
+web/certificates/
+
+# NOTE : les migrations Alembic (backend/alembic/versions/*.py) sont
+# VOLONTAIREMENT versionnées — elles sont indispensables au déploiement
+# (le conteneur `migrate` exécute `alembic upgrade head`).
+
+# Sauvegarde locale de l'ancien dépôt git du frontend (ne pas versionner)
+web/.git.bak-frontend-repo/
+mobile/.git.bak-mobile-repo/

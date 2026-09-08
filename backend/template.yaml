@@ -1,0 +1,475 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SMS Marketing Platform - Serverless API
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+    Runtime: python3.12
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        DATABASE_URL: !Ref DatabaseUrl
+        REDIS_URL: !Ref RedisUrl
+        JWT_SECRET_KEY: !Ref JwtSecretKey
+        SMSBUS_BASE_URL: !Ref SmsbusBaseUrl
+        SMSBUS_USERNAME: !Ref SmsbusUsername
+        SMSBUS_PASSWORD: !Ref SmsbusPassword
+        SMSBUS_ID: !Ref SmsbusId
+        SMSBUS_SENDER_ID: !Ref SmsbusSenderId
+        SMSBUS_DLR_CALLBACK_URL: !Ref SmsbusDlrCallbackUrl
+        SMSBUS_WEBHOOK_SECRET: !Ref SmsbusWebhookSecret
+        WHATSAPP_VERIFY_TOKEN: !Ref WhatsappVerifyToken
+        FACEBOOK_APP_ID: !Ref FacebookAppId
+        FACEBOOK_APP_SECRET: !Ref FacebookAppSecret
+        FACEBOOK_CONFIG_ID: !Ref FacebookConfigId
+        SUBSCRIPTION_MONTHLY_PRICE: !Ref SubscriptionMonthlyPrice
+        ORANGE_MONEY_MERCHANT_CODE: !Ref OrangeMoneyMerchantCode
+        ORANGE_MONEY_MERCHANT_NAME: !Ref OrangeMoneyMerchantName
+        ALLOWED_ORIGINS: !Ref AllowedOrigins
+    VpcConfig:
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: "PostgreSQL connection URL (via RDS Proxy)"
+  RedisUrl:
+    Type: String
+    Description: "URL Redis (ElastiCache)"
+  JwtSecretKey:
+    Type: String
+    NoEcho: true
+  SmsbusBaseUrl:
+    Type: String
+    Default: "https://www.lesmsbus.com:7170/ines.smsbus"
+  SmsbusUsername:
+    Type: String
+    Default: ""
+  SmsbusPassword:
+    Type: String
+    NoEcho: true
+    Default: ""
+  SmsbusId:
+    Type: String
+    Default: ""
+  SmsbusSenderId:
+    Type: String
+    Default: "SMSPro"
+  SmsbusDlrCallbackUrl:
+    Type: String
+    Default: ""
+    Description: "URL de callback pour recevoir les DLR de 3MI (format: https://api.domain.com/v1/webhooks/3mi/dlr)"
+  SmsbusWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: "Token secret inclus dans l'URL DLR pour valider l'origine des requêtes"
+  WhatsappVerifyToken:
+    Type: String
+    Default: ""
+  FacebookAppId:
+    Type: String
+    Default: ""
+  FacebookAppSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+  FacebookConfigId:
+    Type: String
+    Default: ""
+  SubscriptionMonthlyPrice:
+    Type: String
+    Default: "25000"
+  OrangeMoneyMerchantCode:
+    Type: String
+    Default: ""
+  OrangeMoneyMerchantName:
+    Type: String
+    Default: "SMS Pro"
+  AllowedOrigins:
+    Type: String
+    Default: "https://app.smspro.com"
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: "Private subnets for Lambdas (RDS/Redis access)"
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: "VPC to deploy Lambdas into"
+  RdsInstanceIdentifier:
+    Type: String
+    Description: "RDS PostgreSQL instance identifier (e.g. sms-marketing)"
+  PublicSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: "Public subnet for NAT Gateway (must have IGW route)"
+
+Resources:
+  # ─── NAT Gateway (accès internet pour les Lambdas) ──────────────
+  NatEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "sms-marketing-nat-eip-${Environment}"
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnetId
+      Tags:
+        - Key: Name
+          Value: !Sub "sms-marketing-nat-${Environment}"
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub "sms-marketing-private-rt-${Environment}"
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Select [0, !Ref SubnetIds]
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Select [1, !Ref SubnetIds]
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ─── Sécurité réseau ─────────────────────────────────────────────
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda functions
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: "HTTPS sortant (AWS APIs)"
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+          Description: "PostgreSQL (RDS Proxy)"
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: 0.0.0.0/0
+          Description: "Redis (ElastiCache)"
+        - IpProtocol: tcp
+          FromPort: 7170
+          ToPort: 7170
+          CidrIp: 0.0.0.0/0
+          Description: "LeSMSBUS API"
+
+  # Autoriser Lambda → RDS (port 5432 sur le SG de la RDS)
+  RdsSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: sg-0d15ed8d1a8142be5
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+      Description: "Allow Lambda to access RDS via proxy"
+
+  # ─── RDS Proxy ──────────────────────────────────────────────────
+  RdsProxyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RdsProxySecretsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DbSecret
+
+  DbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "sms-marketing/${Environment}/db-credentials"
+      Description: "Identifiants RDS pour le proxy"
+      SecretString: !Sub |
+        {
+          "username": "postgres_admin",
+          "password": "Youmandia1992",
+          "host": "db-sms-marketing.cbku0msa69m9.eu-west-1.rds.amazonaws.com",
+          "port": "5432",
+          "dbname": "postgres"
+        }
+
+  RdsProxy:
+    Type: AWS::RDS::DBProxy
+    Properties:
+      DBProxyName: !Sub "sms-marketing-proxy-${Environment}"
+      EngineFamily: POSTGRESQL
+      RoleArn: !GetAtt RdsProxyRole.Arn
+      RequireTLS: true
+      VpcSubnetIds: !Ref SubnetIds
+      VpcSecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      Auth:
+        - AuthScheme: SECRETS
+          SecretArn: !Ref DbSecret
+          IAMAuth: DISABLED
+
+  RdsProxyTargetGroup:
+    Type: AWS::RDS::DBProxyTargetGroup
+    Properties:
+      DBProxyName: !Ref RdsProxy
+      TargetGroupName: default
+      DBInstanceIdentifiers:
+        - !Ref RdsInstanceIdentifier
+      ConnectionPoolConfigurationInfo:
+        MaxConnectionsPercent: 80
+        MaxIdleConnectionsPercent: 50
+        ConnectionBorrowTimeout: 120
+
+  # ─── API Gateway ────────────────────────────────────────────────
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'Content-Type,Authorization,Accept,Origin,X-Requested-With'"
+        AllowOrigin: "'*'"
+
+  # ─── Lambda principale (API FastAPI) ────────────────────────────
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.main.handler
+      CodeUri: ./
+      Description: SMS Marketing API - FastAPI
+      MemorySize: 1024
+      Timeout: 29
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /{proxy+}
+            Method: ANY
+        HealthEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /health
+            Method: GET
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt SmsQueue.QueueName
+        - S3CrudPolicy:
+            BucketName: !Ref UploadsBucket
+        - VPCAccessPolicy: {}
+    Metadata:
+      BuildMethod: python3.12
+
+  # ─── Lambda Worker (envoi SMS) ─────────────────────────────────
+  SmsWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.workers.sms_worker.handler
+      CodeUri: ./
+      Description: SMS Sending Worker
+      MemorySize: 512
+      Timeout: 60
+      Events:
+        SqsEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SmsQueue.Arn
+            BatchSize: 10
+      Policies:
+        - VPCAccessPolicy: {}
+    Metadata:
+      BuildMethod: python3.12
+
+  # ─── Lambda Scheduler ──────────────────────────────────────────
+  SchedulerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.workers.scheduler.handler
+      CodeUri: ./
+      Description: Campaign Scheduler
+      MemorySize: 512
+      Timeout: 60
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt SmsQueue.QueueName
+        - VPCAccessPolicy: {}
+    Metadata:
+      BuildMethod: python3.12
+
+  SchedulerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SchedulerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduledCampaignRule.Arn
+
+  # ─── Lambda Automation Worker ───────────────────────────────────
+  AutomationWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.workers.automation_worker.handler
+      CodeUri: ./
+      Description: Automation Worker (birthday, inactivity, recurring)
+      MemorySize: 512
+      Timeout: 300
+      Policies:
+        - VPCAccessPolicy: {}
+    Metadata:
+      BuildMethod: python3.12
+
+  AutomationWorkerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AutomationWorkerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AutomationScheduleRule.Arn
+
+  AutomationScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "sms-automation-worker-${Environment}"
+      Description: Run automations every 5 minutes
+      ScheduleExpression: "rate(5 minutes)"
+      State: ENABLED
+      Targets:
+        - Id: AutomationWorkerFunction
+          Arn: !GetAtt AutomationWorkerFunction.Arn
+
+  # ─── Lambda Migration (one-shot) ─────────────────────────────────
+  MigrateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.migrate_handler.handler
+      CodeUri: ./
+      Description: Run Alembic migrations (invoke manually)
+      MemorySize: 256
+      Timeout: 120
+      Policies:
+        - VPCAccessPolicy: {}
+    Metadata:
+      BuildMethod: python3.12
+
+  # ─── SQS Queue pour les SMS ────────────────────────────────────
+  SmsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "sms-marketing-queue-${Environment}"
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SmsDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  SmsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "sms-marketing-dlq-${Environment}"
+      MessageRetentionPeriod: 1209600
+
+  # ─── S3 Bucket pour les imports CSV ────────────────────────────
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "sms-marketing-uploads-${Environment}"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
+
+  # ─── Lambda DLR Worker (accusés de réception) ───────────────────
+  DlrWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.workers.dlr_worker.handler
+      CodeUri: ./
+      Description: DLR Worker - Vérification périodique des accusés de réception
+      MemorySize: 512
+      Timeout: 120
+      Policies:
+        - VPCAccessPolicy: {}
+    Metadata:
+      BuildMethod: python3.12
+
+  DlrWorkerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DlrWorkerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DlrCheckScheduleRule.Arn
+
+  DlrCheckScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "sms-dlr-check-${Environment}"
+      Description: Check DLR status every 2 minutes
+      ScheduleExpression: "rate(2 minutes)"
+      State: ENABLED
+      Targets:
+        - Id: DlrWorkerFunction
+          Arn: !GetAtt DlrWorkerFunction.Arn
+
+  # ─── EventBridge Rule pour les campagnes programmées ───────────
+  ScheduledCampaignRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "sms-scheduled-campaigns-${Environment}"
+      Description: Check scheduled campaigns every minute
+      ScheduleExpression: "rate(1 minute)"
+      State: ENABLED
+      Targets:
+        - Id: SchedulerFunction
+          Arn: !GetAtt SchedulerFunction.Arn
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway URL
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+  RdsProxyEndpoint:
+    Description: Endpoint RDS Proxy (use in DATABASE_URL)
+    Value: !GetAtt RdsProxy.Endpoint
+  SmsQueueUrl:
+    Description: SQS Queue URL
+    Value: !Ref SmsQueue

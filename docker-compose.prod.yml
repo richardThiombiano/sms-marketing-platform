@@ -1,0 +1,207 @@
+# ============================================================
+# SMS Marketing Platform — Docker Compose PRODUCTION (VPS)
+# ============================================================
+# Stack applicative : PostgreSQL + Redis + API FastAPI + Frontend
+# Next.js + Workers. Le HTTPS et le routage sont assurés par le
+# reverse proxy central Traefik (dossier reverse-proxy/), via le
+# réseau Docker externe partagé "web-proxy".
+#
+# Prérequis :
+#   - Le réseau externe doit exister :  docker network create web-proxy
+#   - La stack reverse-proxy/ doit tourner (Traefik écoute sur 80/443).
+#
+# Usage :
+#   cp .env.prod.example .env.prod   # puis remplir les valeurs
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Sous-domaines exposés via labels Traefik :
+#   app.marikxgroup.com  → web (Next.js)
+#   api.marikxgroup.com  → backend (FastAPI)
+# ============================================================
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sms_marketing}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sms_marketing}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sms-net
+
+  # ─── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sms-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sms-net
+
+  # ─── Migrations (job ponctuel : alembic upgrade head) ──────────
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-migrate
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sms_marketing}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head
+    restart: "no"
+    networks:
+      - sms-net
+
+  # ─── Backend API (FastAPI) ─────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-backend
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sms_marketing}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+      DEBUG: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}
+    networks:
+      - sms-net
+      - web-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web-proxy"
+      # Routeur API : api.marikxgroup.com
+      - "traefik.http.routers.sms-api.rule=Host(`${API_DOMAIN:-api.marikxgroup.com}`)"
+      - "traefik.http.routers.sms-api.entrypoints=websecure"
+      - "traefik.http.routers.sms-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sms-api.loadbalancer.server.port=8000"
+
+  # ─── Frontend Web (Next.js) ────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_API_URL est build-time dans Next.js : injecté au build
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL requis}
+    container_name: sms-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    depends_on:
+      - backend
+    networks:
+      - sms-net
+      - web-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web-proxy"
+      # Routeur Web : app.marikxgroup.com
+      - "traefik.http.routers.sms-web.rule=Host(`${APP_DOMAIN:-app.marikxgroup.com}`)"
+      - "traefik.http.routers.sms-web.entrypoints=websecure"
+      - "traefik.http.routers.sms-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.sms-web.loadbalancer.server.port=3000"
+
+  # ─── Worker Automation (anniversaires, inactivité, récurrents) ──
+  automation-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-automation-worker
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sms_marketing}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+    depends_on:
+      backend:
+        condition: service_started
+    command: python -m app.workers.automation_worker
+    networks:
+      - sms-net
+
+  # ─── Worker DLR (accusés de réception SMS) ─────────────────────
+  dlr-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-dlr-worker
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sms_marketing}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+    depends_on:
+      backend:
+        condition: service_started
+    command: python -m app.workers.dlr_worker
+    networks:
+      - sms-net
+
+  # ─── Scheduler (campagnes programmées) ─────────────────────────
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sms-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sms_marketing}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: production
+    depends_on:
+      backend:
+        condition: service_started
+    command: python -m app.workers.scheduler
+    networks:
+      - sms-net
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  # Réseau interne privé de la stack (postgres, redis, workers)
+  sms-net:
+    driver: bridge
+  # Réseau partagé avec le reverse proxy Traefik (créé à part) :
+  #   docker network create web-proxy
+  web-proxy:
+    external: true

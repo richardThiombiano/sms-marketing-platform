@@ -1,0 +1,368 @@
+{
+  "info": {
+    "name": "SMS Pro - API Tests",
+    "description": "Collection Postman pour tester l'API SMS Marketing Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000/v1" },
+    { "key": "superadminToken", "value": "" },
+    { "key": "ownerToken", "value": "" },
+    { "key": "tenantId", "value": "" },
+    { "key": "contactId", "value": "" },
+    { "key": "campaignId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Login Superadmin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('superadminToken', jsonData.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@sms-pro.com\",\n  \"password\": \"Admin@2024!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login Owner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('ownerToken', jsonData.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"aminata@digicommerce.bf\",\n  \"password\": \"OwnerPass123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Register (Bloqué - 403)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"Test\",\n  \"email\": \"test@test.com\",\n  \"password\": \"Test1234!\",\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Mon Profil",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/me",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Admin (Superadmin)",
+      "item": [
+        {
+          "name": "Créer un Tenant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('tenantId', jsonData.tenant_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/tenants",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superadminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"DigiCommerce\",\n  \"email\": \"contact@digicommerce.bf\",\n  \"phone\": \"+22670123456\",\n  \"plan\": \"pro\",\n  \"sms_credits\": 500,\n  \"sms_provider\": \"3mi\",\n  \"smsbus_username\": \"digicommerce\",\n  \"smsbus_password\": \"mot_de_passe_3mi\",\n  \"smsbus_id\": \"DIGI001\",\n  \"smsbus_sender_id\": \"DigiCom\",\n  \"owner_first_name\": \"Aminata\",\n  \"owner_last_name\": \"Koné\",\n  \"owner_email\": \"aminata@digicommerce.bf\",\n  \"owner_password\": \"OwnerPass123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Lister les Tenants",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/tenants",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superadminToken}}" }]
+          }
+        },
+        {
+          "name": "Changer Provider SMS",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/provider",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{superadminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sms_provider\": \"3mi\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Ajouter Crédits SMS",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/credits?amount=1000",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superadminToken}}" }]
+          }
+        },
+        {
+          "name": "Activer/Désactiver Tenant",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/admin/tenants/{{tenantId}}/toggle",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superadminToken}}" }]
+          }
+        },
+        {
+          "name": "Solde 3MI",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/smsbus/balance",
+            "header": [{ "key": "Authorization", "value": "Bearer {{superadminToken}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Contacts",
+      "item": [
+        {
+          "name": "Créer un Contact",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('contactId', jsonData.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/contacts",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"22676837604\",\n  \"first_name\": \"Ibrahim\",\n  \"last_name\": \"Diallo\",\n  \"email\": \"ibrahim@gmail.com\",\n  \"city\": \"Ouagadougou\",\n  \"country\": \"Burkina Faso\",\n  \"tags\": [\"vip\", \"fidele\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Lister les Contacts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/contacts",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        },
+        {
+          "name": "Rechercher un Contact",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/contacts?search=Ibrahim",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        },
+        {
+          "name": "Modifier un Contact",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/contacts/{{contactId}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"city\": \"Bobo-Dioulasso\",\n  \"tags\": [\"vip\", \"premium\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Désinscrire (Opt-out)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/contacts/{{contactId}}/unsubscribe",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        },
+        {
+          "name": "Supprimer un Contact",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/contacts/{{contactId}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Campagnes",
+      "item": [
+        {
+          "name": "Créer une Campagne",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('campaignId', jsonData.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/campaigns",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Promo Juillet -25%\",\n  \"content\": \"🎉 Profitez de -25% sur tout ! Code: JUIL25\",\n  \"type\": \"marketing\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Lister les Campagnes",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/campaigns",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        },
+        {
+          "name": "Programmer une Campagne",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/campaigns/{{campaignId}}/schedule?scheduled_at=2026-07-15T09:00:00",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        },
+        {
+          "name": "Annuler une Campagne",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/campaigns/{{campaignId}}/cancel",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        },
+        {
+          "name": "Envoyer une Campagne",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/campaigns/{{campaignId}}/send",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. SMS Direct",
+      "item": [
+        {
+          "name": "Envoyer un SMS",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/sms/send",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"22676837604\",\n  \"content\": \"Bonjour ! Votre code est 4521\",\n  \"type\": \"transactional\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Envoi Bulk SMS",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/sms/send-bulk",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phones\": [\"22676837604\", \"22670112233\"],\n  \"content\": \"🔥 Vente flash -30% aujourd'hui !\",\n  \"type\": \"marketing\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Webhooks 3MI",
+      "item": [
+        {
+          "name": "Simuler DLR (Delivered)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/webhooks/3mi/dlr?msg=DELIVERED&dnr=22676837604&msgId=12345"
+          }
+        },
+        {
+          "name": "Simuler SMS entrant (MO)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/webhooks/3mi/mo?msg=Bonjour&dnr=22676837604&srn=3030"
+          }
+        },
+        {
+          "name": "Simuler Opt-out (STOP)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/webhooks/3mi/mo?msg=STOP&dnr=22676837604&srn=3030"
+          }
+        }
+      ]
+    }
+  ]
+}

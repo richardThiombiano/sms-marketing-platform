@@ -1,0 +1,48 @@
+# Fichiers exclus du package Lambda (réduit la taille du déploiement)
+
+# Environnement local
+.venv/
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+
+# Tests
+tests/
+pytest.ini
+
+# Build / packaging
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.pyc
+
+# Git
+.git/
+.gitignore
+
+# Docker (pas nécessaire sur Lambda)
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Alembic (migrations gérées séparément)
+alembic/
+alembic.ini
+
+# Documentation
+*.md
+docs/
+
+# SAM config (pas dans le package Lambda)
+samconfig.toml
+template.yaml
+.samignore
+
+# Scripts de dev
+run_scheduler.py
+run_automations.py
+init_db.py

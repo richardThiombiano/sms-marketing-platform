@@ -1,0 +1,28 @@
+# .easignore
+
+# Dépendances (réinstallées côté serveur)
+node_modules/
+
+# Builds natifs locaux (régénérés par EAS)
+android/
+ios/
+
+# Artefacts de build
+*.apk
+*.aab
+*.ipa
+dist/
+build/
+web-build/
+
+# Assets lourds non nécessaires au build
+*.mov
+*.mp4
+*.zip
+assets/videos/
+
+# Divers
+.git/
+.expo/
+coverage/
+*.log

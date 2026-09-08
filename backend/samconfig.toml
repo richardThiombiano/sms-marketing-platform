@@ -1,0 +1,63 @@
+# ─── Configuration SAM CLI ─────────────────────────────────────────
+# Utilisé par `sam build` et `sam deploy`
+# Remplis les valeurs "CHANGE_ME" avant le premier déploiement
+
+version = 0.1
+
+[default.build.parameters]
+use_container = false
+parallel = true
+cached = true
+
+[default.deploy.parameters]
+stack_name = "sms-marketing-api"
+resolve_s3 = true
+s3_prefix = "sms-marketing-api"
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+confirm_changeset = true
+region = "eu-west-1"
+disable_rollback = false
+
+parameter_overrides = [
+    "Environment=production",
+    "DatabaseUrl=postgresql+asyncpg://postgres_admin:Youmandia1992@db-sms-marketing.cbku0msa69m9.eu-west-1.rds.amazonaws.com:5432/postgres",
+    "RedisUrl=redis://CHANGE_ME.cache.amazonaws.com:6379/0",
+    "JwtSecretKey=e775498cdc7866e65deabf1caf154fac71c54086b639e6b13471463b7d4236ed",
+    "SubnetIds=subnet-081a5c81b12ed4491,subnet-00e36acb74dce9802",
+    "VpcId=vpc-02e525fdabd1d0a3e",
+    "RdsInstanceIdentifier=db-sms-marketing",
+    "PublicSubnetId=subnet-020279f95d55eecef",
+    "SmsbusBaseUrl=https://www.lesmsbus.com:7170/ines.smsbus",
+    "SmsbusUsername=youmandia",
+    "SmsbusPassword=Youmandia92@@",
+    "SmsbusId=13072023SOMUSICVIC3MI",
+    "SmsbusSenderId=SMSPro",
+    "WhatsappVerifyToken=1409069184616375|XMKs4e5GyvINls-qjA9HWrD-K3o",
+    "FacebookAppId=1277097001053294",
+    "FacebookAppSecret=bf1945c40669d284d23b6fe7edebeff1",
+    "FacebookConfigId=2350213488889747",
+    "SubscriptionMonthlyPrice=25000",
+    "OrangeMoneyMerchantCode=*144*10*55234342*montant#",
+    "OrangeMoneyMerchantName=SMS Pro",
+    "AllowedOrigins=https://main.d2a1p84lte2w8h.amplifyapp.com"
+]
+
+# ─── Staging ──────────────────────────────────────────────────────
+#[staging.deploy.parameters]
+#stack_name = "sms-marketing-api-staging"
+#resolve_s3 = true
+#s3_prefix = "sms-marketing-api-staging"
+#capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+#confirm_changeset = true
+#region = "eu-west-2"
+#
+#parameter_overrides = [
+#    "Environment=staging",
+#    "DatabaseUrl=postgresql+asyncpg://postgres:postgres@sms-marketing.cneeaew0y47f.eu-west-2.rds.amazonaws.com:5432/postgres",
+#    "RedisUrl=redis://STAGING_REDIS:6379/0",
+#    "JwtSecretKey=e775498cdc7866e65deabf1caf154fac71c54086b639e6b13471463b7d4236ed",
+#    "SubnetIds=sms-pro-subnet-private1-eu-west-2a,sms-pro-subnet-private2-eu-west-2b",
+#    "VpcId=vpc-00e1932d5430d26a5",
+#    "RdsInstanceArn=arn:aws:rds:eu-west-2:ACCOUNT_ID:db:sms-marketing-staging",
+#    "RdsResourceId=db-CHANGE_ME"
+#]

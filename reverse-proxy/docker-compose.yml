@@ -1,0 +1,51 @@
+# ============================================================
+# Reverse proxy central — Traefik v3
+# ============================================================
+# Stack INDÉPENDANTE des applications. À démarrer EN PREMIER.
+# Toutes les apps du VPS rejoignent le réseau externe "web-proxy"
+# et déclarent leur routage via des labels Traefik.
+#
+# Préparation (une seule fois) :
+#   docker network create web-proxy
+#   cp .env.example .env   # puis renseigner ACME_EMAIL + les identifiants dashboard
+#   touch letsencrypt/acme.json && chmod 600 letsencrypt/acme.json
+#
+# Démarrage :
+#   docker compose up -d
+# ============================================================
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      # On charge la config statique depuis le fichier monté
+      - "--configFile=/etc/traefik/traefik.yml"
+      # Email ACME injecté depuis l'environnement (surcharge le fichier)
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?ACME_EMAIL requis}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik.yml:/etc/traefik/traefik.yml:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - web-proxy
+    labels:
+      - "traefik.enable=true"
+      # ─── Dashboard sécurisé : https://traefik.marikxgroup.com ──
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.marikxgroup.com`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      # Protection par mot de passe (Basic Auth). Générez le hash :
+      #   htpasswd -nbB admin 'VOTRE_MOT_DE_PASSE'
+      # puis mettez la valeur dans .env (échapper les $ en $$ dans .env).
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+
+networks:
+  web-proxy:
+    external: true
