@@ -16,6 +16,10 @@ RUN npm run build
 FROM node:18-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+# Next.js standalone se lie à une seule interface par défaut. Sur un
+# conteneur multi-réseaux (sms-net + web-proxy), il faut écouter sur
+# TOUTES les interfaces, sinon Traefik (sur web-proxy) obtient un 502.
+ENV HOSTNAME=0.0.0.0 PORT=3000
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
